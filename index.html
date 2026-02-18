@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cobra Kay Club – Tessera Online</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="bg-noise"></div>
+  <header class="site-header">
+    <div class="logo">COBRA KAY CLUB</div>
+    <div class="tagline">Tessera Online • Accumula punti • Vinci premi</div>
+  </header>
+
+  <main class="container">
+    <section class="screen screen-auth active" id="authScreen" aria-labelledby="login-title">
+      <section class="card card-login">
+      <div class="card-header">
+        <h2 id="login-title">Accesso</h2>
+        <div class="pill" id="authStatus">Non autenticato</div>
+      </div>
+      <p class="muted">Usa nickname e password per accedere.</p>
+      <form id="loginForm" autocomplete="off">
+        <div class="input-row input-row-split">
+          <input id="nicknameInput" name="nickname" type="text" placeholder="Nickname" maxlength="16" />
+          <input id="passwordInput" name="password" type="password" placeholder="Password" maxlength="32" />
+        </div>
+        <div class="input-row input-row-split">
+          <button class="btn btn-primary" id="loginBtn" type="submit">Entra / Registra</button>
+          <button class="btn btn-ghost" id="logoutBtn" type="button" disabled>Logout</button>
+        </div>
+        <div class="feedback" id="authFeedback" role="status" aria-live="polite"></div>
+      </form>
+      </section>
+    </section>
+
+    <section class="screen screen-app" id="appScreen" aria-hidden="true">
+    <section class="card card-points" aria-labelledby="points-title">
+      <div class="card-header">
+        <h2 id="points-title">Tessera Punti</h2>
+      </div>
+      <div class="reward-badges" id="rewardBadges"></div>
+
+      <div class="progress-wrap">
+        <div class="progress-label">Punti: <span id="pointsText">0</span> / 30</div>
+        <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="30" aria-valuenow="0">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+      </div>
+
+      <div class="pips" id="pips" aria-label="Punti tessera"></div>
+    </section>
+
+    <section class="card card-redeem" aria-labelledby="redeem-title">
+      <div class="card-header">
+        <h2 id="redeem-title">Inserisci Codice</h2>
+        <button class="btn btn-ghost" id="adminToggle" type="button">Modalità Admin (demo)</button>
+      </div>
+      <p class="muted">Codici 6–16 caratteri, solo lettere e numeri.</p>
+      <form id="redeemForm" autocomplete="off">
+        <div class="input-row">
+          <input id="codeInput" name="code" type="text" inputmode="text" placeholder="Es: CK2026A1" maxlength="16" />
+          <button class="btn btn-primary" id="redeemBtn" type="submit">Riscatta</button>
+        </div>
+        <div class="feedback" id="feedback" role="status" aria-live="polite"></div>
+      </form>
+      <button class="btn btn-primary" id="openScratchBtn" type="button" disabled>Prova a vincere un premio</button>
+
+      <div class="admin-panel" id="adminPanel" aria-hidden="true">
+        <div class="admin-title">Admin demo attiva</div>
+        <div class="admin-text">Ora sono accettati solo i codici presenti nella lista interna.</div>
+        <div class="admin-list" id="adminList"></div>
+      </div>
+    </section>
+
+    <section class="card card-used" aria-labelledby="used-title">
+      <div class="card-header">
+        <h2 id="used-title">Codici Usati (ultimi 5)</h2>
+      </div>
+      <ul class="used-list" id="usedList"></ul>
+    </section>
+
+    <section class="card card-scratch" id="scratchSection" aria-labelledby="scratch-title" aria-hidden="true">
+      <div class="card-header">
+        <h2 id="scratch-title">Gratta e Vinci</h2>
+        <div class="pill" id="scratchStatus">Pronto</div>
+      </div>
+      <button class="btn btn-ghost" id="backBtn" type="button">Torna alla tessera</button>
+      <p class="muted">Clicca tutte e 3 le carte per rivelare i simboli. Trova 3 simboli uguali e vinci un Portachiavi!</p>
+      <div class="scratch-grid" id="scratchGrid" role="grid" aria-label="Gratta e vinci"></div>
+      <div class="scratch-result" id="scratchResult"></div>
+    </section>
+    </section>
+  </main>
+
+  <div class="overlay" id="winOverlay" aria-hidden="true">
+    <div class="overlay-card">
+      <div class="win-title">Hai vinto un premio!</div>
+      <div class="win-text">Complimenti, continua a collezionare punti.</div>
+      <div class="overlay-actions">
+        <button class="btn btn-primary" id="closeOverlay" type="button">Continua</button>
+        <button class="btn btn-ghost" id="resetBtn" type="button">Reset tessera</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
