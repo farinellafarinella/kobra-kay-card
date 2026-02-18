@@ -1,25 +1,3 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import {
-  getAuth,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyCI3xEL2Yr84qaFYddE2W32PW7N6AYtC_w",
-  authDomain: "tessera-kobra.firebaseapp.com",
-  projectId: "tessera-kobra",
-  storageBucket: "tessera-kobra.firebasestorage.app",
-  messagingSenderId: "288055004577",
-  appId: "1:288055004577:web:84f7d3bd047146bc204fe0",
-  measurementId: "G-ZDTZB3JFMF"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-
 const VALID_CODES = [
   "CK2026A1", "VIP7X2", "KAY9Z8", "COBRA11", "KAYFIRE",
   "C0BR4K", "KAY2026", "VIPCOB", "SNAKE77", "DKRUSH9",
@@ -29,11 +7,8 @@ const VALID_CODES = [
 ];
 
 const STORAGE_KEYS = {
-  points: "ck_points",
-  usedCodes: "ck_used_codes",
-  deckWon: "ck_deck_won",
-  rewardLevel: "ck_reward_level",
-  lastScratch: "ck_last_scratch",
+  users: "ck_users",
+  currentUser: "ck_current_user",
   adminMode: "ck_admin_mode"
 };
 
@@ -58,7 +33,8 @@ const state = {
   revealedCount: 0,
   adminMode: false,
   scratchAvailable: false,
-  authed: false
+  authed: false,
+  nickname: ""
 };
 
 const el = {
@@ -94,12 +70,15 @@ const el = {
   appScreen: document.getElementById("appScreen")
 };
 
-function loadState() {
-  state.points = clamp(parseInt(localStorage.getItem(STORAGE_KEYS.points), 10) || 0, 0, MAX_POINTS);
-  state.usedCodes = JSON.parse(localStorage.getItem(STORAGE_KEYS.usedCodes) || "[]");
-  state.deckWon = localStorage.getItem(STORAGE_KEYS.deckWon) === "true";
-  state.rewardLevel = clamp(parseInt(localStorage.getItem(STORAGE_KEYS.rewardLevel), 10) || 0, 0, REWARDS.length);
-  state.adminMode = localStorage.getItem(STORAGE_KEYS.adminMode) === "true";
+function userKey(nickname) {
+  return `ck_user_${nickname.toLowerCase()}`;
+}
+
+function resetUserState() {
+  state.points = 0;
+  state.usedCodes = [];
+  state.deckWon = false;
+  state.rewardLevel = 0;
   state.scratchOpen = false;
   state.scratchPlayable = false;
   state.scratchGrid = [];
@@ -107,11 +86,50 @@ function loadState() {
   state.scratchAvailable = false;
 }
 
-function saveState() {
-  localStorage.setItem(STORAGE_KEYS.points, state.points.toString());
-  localStorage.setItem(STORAGE_KEYS.usedCodes, JSON.stringify(state.usedCodes));
-  localStorage.setItem(STORAGE_KEYS.deckWon, state.deckWon ? "true" : "false");
-  localStorage.setItem(STORAGE_KEYS.rewardLevel, state.rewardLevel.toString());
+function loadUserData(nickname) {
+  const raw = localStorage.getItem(userKey(nickname));
+  if (!raw) {
+    resetUserState();
+    return;
+  }
+  const data = JSON.parse(raw);
+  state.points = clamp(parseInt(data.points, 10) || 0, 0, MAX_POINTS);
+  state.usedCodes = Array.isArray(data.usedCodes) ? data.usedCodes : [];
+  state.deckWon = Boolean(data.deckWon);
+  state.rewardLevel = clamp(parseInt(data.rewardLevel, 10) || 0, 0, REWARDS.length);
+  state.scratchOpen = false;
+  state.scratchPlayable = false;
+  state.scratchGrid = [];
+  state.revealedCount = 0;
+  state.scratchAvailable = false;
+}
+
+function saveUserData() {
+  if (!state.authed || !state.nickname) return;
+  const payload = {
+    points: state.points,
+    usedCodes: state.usedCodes,
+    deckWon: state.deckWon,
+    rewardLevel: state.rewardLevel
+  };
+  localStorage.setItem(userKey(state.nickname), JSON.stringify(payload));
+}
+
+function loadSession() {
+  state.adminMode = localStorage.getItem(STORAGE_KEYS.adminMode) === "true";
+  const current = localStorage.getItem(STORAGE_KEYS.currentUser);
+  if (current) {
+    state.nickname = current;
+    state.authed = true;
+    loadUserData(current);
+  } else {
+    state.authed = false;
+    state.nickname = "";
+    resetUserState();
+  }
+}
+
+function saveAdminMode() {
   localStorage.setItem(STORAGE_KEYS.adminMode, state.adminMode ? "true" : "false");
 }
 
@@ -184,6 +202,7 @@ function setAuthFeedback(message, type) {
 
 function setAuthUi(isAuthed, nickname = "") {
   state.authed = isAuthed;
+  state.nickname = isAuthed ? nickname : "";
   el.authStatus.textContent = isAuthed ? `Autenticato: ${nickname}` : "Non autenticato";
   el.authScreen.classList.toggle("active", !isAuthed);
   el.appScreen.classList.toggle("active", isAuthed);
@@ -203,18 +222,39 @@ function setAuthUi(isAuthed, nickname = "") {
   }
 }
 
-function nicknameToEmail(nickname) {
-  return `${nickname.toLowerCase()}@tessera.local`;
+function getUsers() {
+  return JSON.parse(localStorage.getItem(STORAGE_KEYS.users) || "[]");
+}
+
+function saveUsers(users) {
+  localStorage.setItem(STORAGE_KEYS.users, JSON.stringify(users));
+}
+
+async function hashPassword(password) {
+  if (crypto && crypto.subtle) {
+    const enc = new TextEncoder();
+    const buf = await crypto.subtle.digest("SHA-256", enc.encode(password));
+    return Array.from(new Uint8Array(buf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+  // Fallback (weak) hash if SubtleCrypto isn't available
+  let hash = 0;
+  for (let i = 0; i < password.length; i += 1) {
+    hash = (hash << 5) - hash + password.charCodeAt(i);
+    hash |= 0;
+  }
+  return `x${Math.abs(hash)}`;
 }
 
 async function handleLogin(event) {
   event.preventDefault();
   if (el.loginBtn.disabled) return;
-  const nickname = el.nicknameInput.value.trim();
+  const nicknameRaw = el.nicknameInput.value.trim();
   const password = el.passwordInput.value;
   setAuthFeedback("", "");
 
-  if (!NICK_REGEX.test(nickname)) {
+  if (!NICK_REGEX.test(nicknameRaw)) {
     setAuthFeedback("Nickname non valido (3–16 caratteri alfanumerici).", "error");
     return;
   }
@@ -225,33 +265,43 @@ async function handleLogin(event) {
 
   el.loginBtn.disabled = true;
   try {
-    const email = nicknameToEmail(nickname);
-    await signInWithEmailAndPassword(auth, email, password);
-    setAuthFeedback("Accesso effettuato.", "success");
-  } catch (err) {
-    if (err && err.code === "auth/user-not-found") {
-      try {
-        const email = nicknameToEmail(nickname);
-        await createUserWithEmailAndPassword(auth, email, password);
-        setAuthFeedback("Utente creato e accesso effettuato.", "success");
-      } catch (createErr) {
-        setAuthFeedback("Errore registrazione. Riprova.", "error");
+    const nickname = nicknameRaw.toLowerCase();
+    const users = getUsers();
+    const existing = users.find((u) => u.nickname === nickname);
+    const passHash = await hashPassword(password);
+
+    if (existing) {
+      if (existing.passHash !== passHash) {
+        setAuthFeedback("Password errata.", "error");
+        el.loginBtn.disabled = false;
+        return;
       }
-    } else if (err && err.code === "auth/wrong-password") {
-      setAuthFeedback("Password errata.", "error");
     } else {
-      setAuthFeedback("Errore accesso. Riprova.", "error");
+      users.push({ nickname, passHash });
+      saveUsers(users);
     }
+
+    localStorage.setItem(STORAGE_KEYS.currentUser, nickname);
+    loadUserData(nickname);
+    setAuthUi(true, nickname);
+    renderPoints();
+    renderUsedCodes();
+    checkRewards();
+    setAuthFeedback(existing ? "Accesso effettuato." : "Utente creato e accesso effettuato.", "success");
+  } catch (err) {
+    setAuthFeedback("Errore accesso. Riprova.", "error");
   } finally {
-    if (!state.authed) {
-      el.loginBtn.disabled = false;
-    }
+    if (!state.authed) el.loginBtn.disabled = false;
   }
 }
 
 async function handleLogout() {
   if (el.logoutBtn.disabled) return;
-  await signOut(auth);
+  localStorage.removeItem(STORAGE_KEYS.currentUser);
+  resetUserState();
+  setAuthUi(false);
+  renderPoints();
+  renderUsedCodes();
   setAuthFeedback("Logout effettuato.", "success");
 }
 
@@ -391,7 +441,7 @@ function handleRedeem(event) {
     state.deckWon = true;
   }
 
-  saveState();
+  saveUserData();
   renderPoints();
   renderUsedCodes();
 
@@ -431,7 +481,7 @@ function resetCard() {
   state.deckWon = false;
   state.rewardLevel = 0;
   state.scratchAvailable = false;
-  saveState();
+  saveUserData();
   renderPoints();
   renderUsedCodes();
   toggleScratchSection(false);
@@ -443,7 +493,7 @@ function resetCard() {
 
 function toggleAdminMode() {
   state.adminMode = !state.adminMode;
-  saveState();
+  saveAdminMode();
   renderAdminPanel();
 }
 
@@ -469,13 +519,17 @@ function renderAdminList() {
 }
 
 function init() {
-  loadState();
+  loadSession();
   renderPoints();
   renderUsedCodes();
   renderAdminPanel();
   renderAdminList();
   toggleScratchSection(false);
-  setAuthUi(false);
+  if (state.authed) {
+    setAuthUi(true, state.nickname);
+  } else {
+    setAuthUi(false);
+  }
 
   el.redeemForm.addEventListener("submit", handleRedeem);
   el.resetBtn.addEventListener("click", resetCard);
@@ -485,15 +539,6 @@ function init() {
   el.backBtn.addEventListener("click", () => toggleScratchSection(false));
   el.loginForm.addEventListener("submit", handleLogin);
   el.logoutBtn.addEventListener("click", handleLogout);
-
-  onAuthStateChanged(auth, (user) => {
-    if (user) {
-      const nickname = user.email ? user.email.split("@")[0] : "utente";
-      setAuthUi(true, nickname);
-    } else {
-      setAuthUi(false);
-    }
-  });
 
   checkRewards();
 }
@@ -509,7 +554,7 @@ function checkRewards() {
   });
   if (newLevel > state.rewardLevel) {
     state.rewardLevel = newLevel;
-    saveState();
+    saveUserData();
     showRewardOverlay(REWARDS[newLevel - 1].name);
   }
 }
